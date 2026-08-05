@@ -1,0 +1,17 @@
+"Mode","BaseName","Target","LinkType","Name","FullName","Parent","Exists","Root","Extension","CreationTime","CreationTimeUtc","LastAccessTime","LastAccessTimeUtc","LastWriteTime","LastWriteTimeUtc","Attributes"
+"darhsl","Create-VantagePointProject.ps1",,,"Create-VantagePointProject.ps1","C:\Windows\System32\WindowsPowerShell\v1.0\Create-VantagePointProject.ps1","v1.0","False","C:\",".ps1","12/31/1600 7:00:00 PM","1/1/1601 12:00:00 AM","12/31/1600 7:00:00 PM","1/1/1601 12:00:00 AM","12/31/1600 7:00:00 PM","1/1/1601 12:00:00 AM","-1"
+,,,,"Create-VantagePointProject",,,,,,,,,,,,
+"darhsl","Get-GeoLocation.ps1",,,"Get-GeoLocation.ps1","C:\Windows\System32\WindowsPowerShell\v1.0\Get-GeoLocation.ps1","v1.0","False","C:\",".ps1","12/31/1600 7:00:00 PM","1/1/1601 12:00:00 AM","12/31/1600 7:00:00 PM","1/1/1601 12:00:00 AM","12/31/1600 7:00:00 PM","1/1/1601 12:00:00 AM","-1"
+,,,,"Get-GeoLocation",,,,,,,,,,,,
+"darhsl","Get-GeoLocationGeneric.ps1",,,"Get-GeoLocationGeneric.ps1","C:\Windows\System32\WindowsPowerShell\v1.0\Get-GeoLocationGeneric.ps1","v1.0","False","C:\",".ps1","12/31/1600 7:00:00 PM","1/1/1601 12:00:00 AM","12/31/1600 7:00:00 PM","1/1/1601 12:00:00 AM","12/31/1600 7:00:00 PM","1/1/1601 12:00:00 AM","-1"
+,,,,"Get-GeoLocationGeneric",,,,,,,,,,,,
+"darhsl","Get-GeoLocationVantagepoint.ps1",,,"Get-GeoLocationVantagepoint.ps1","C:\Windows\System32\WindowsPowerShell\v1.0\Get-GeoLocationVantagepoint.ps1","v1.0","False","C:\",".ps1","12/31/1600 7:00:00 PM","1/1/1601 12:00:00 AM","12/31/1600 7:00:00 PM","1/1/1601 12:00:00 AM","12/31/1600 7:00:00 PM","1/1/1601 12:00:00 AM","-1"
+,,,,"Get-GeoLocationVantagepoint",,,,,,,,,,,,
+"darhsl","Invoke-Offboarding.ps1",,,"Invoke-Offboarding.ps1","C:\Windows\System32\WindowsPowerShell\v1.0\Invoke-Offboarding.ps1","v1.0","False","C:\",".ps1","12/31/1600 7:00:00 PM","1/1/1601 12:00:00 AM","12/31/1600 7:00:00 PM","1/1/1601 12:00:00 AM","12/31/1600 7:00:00 PM","1/1/1601 12:00:00 AM","-1"
+,,,,"Invoke-Offboarding",,,,,,,,,,,,
+"darhsl","Sync-Vision-To-AzureAD.ps1",,,"Sync-Vision-To-AzureAD.ps1","C:\Windows\System32\WindowsPowerShell\v1.0\Sync-Vision-To-AzureAD.ps1","v1.0","False","C:\",".ps1","12/31/1600 7:00:00 PM","1/1/1601 12:00:00 AM","12/31/1600 7:00:00 PM","1/1/1601 12:00:00 AM","12/31/1600 7:00:00 PM","1/1/1601 12:00:00 AM","-1"
+,,,,"Sync-Vision-To-AzureAD",,,,,,,,,,,,
+"darhsl","Verify-User.ps1",,,"Verify-User.ps1","C:\Windows\System32\WindowsPowerShell\v1.0\Verify-User.ps1","v1.0","False","C:\",".ps1","12/31/1600 7:00:00 PM","1/1/1601 12:00:00 AM","12/31/1600 7:00:00 PM","1/1/1601 12:00:00 AM","12/31/1600 7:00:00 PM","1/1/1601 12:00:00 AM","-1"
+,,,,"Verify-User",,,,,,,,,,,,
+"darhsl","whoami.ps1",,,"whoami.ps1","C:\Windows\System32\WindowsPowerShell\v1.0\whoami.ps1","v1.0","False","C:\",".ps1","12/31/1600 7:00:00 PM","1/1/1601 12:00:00 AM","12/31/1600 7:00:00 PM","1/1/1601 12:00:00 AM","12/31/1600 7:00:00 PM","1/1/1601 12:00:00 AM","-1"
+,,,,"whoami",,,,,,,,,,,,
