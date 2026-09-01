@@ -1,10 +1,10 @@
 
-<#
+<# Webhook as of 8-21-26. Update this if it ever gets changed.
 
-    The URL to invoke this runbook is stored in a key vault. If it needs to be changed, update it in that key vault.
-    
-#>
+https://a820bc96-f0d4-4a0e-a996-c8a1db4b8416.webhook.eus.azure-automation.net/webhooks?token=wfp0AGVZCRZnERNJsDPhziXlRrky8bBC7wyHix7tanY%3d
 
+#> 
+ 
 param
 (
     [Parameter(Mandatory=$false)]
@@ -24,26 +24,22 @@ Try {
     write-output $WebhookData.RequestHeader
     write-output "end"
 
-<# Extract RequestBody using regex        THIS MAY ONLY APPLY WHEN INVOKING FROM ANOTHER RUNBOOK
+# Extract RequestBody using regex
 if ($WebhookData -notmatch 'RequestBody:(\{.*?\})') {
     throw "RequestBody not found in WebhookData"
 }
-
-    $requestBodyJson = $matches[1]
-    
-    write-output $requestBodyJson
 #>
 
+    $requestBodyJson = $matches[1]
 
+    #$requestBodyJson = $WebhookData.RequestBody
+
+    write-output $requestBodyJson
     $payload = $requestBodyJson | ConvertFrom-Json
-    $payload = $WebhookData.RequestBody | ConvertFrom-Json
 
-    write-output "Payload: $payload"
+    write-output $payload
     
     $email = $payload.email
-    $assigneeEmail = $payload.assigneeEmail 
-
-    write-output "Processing user: $email"
 
 }
 Catch {
@@ -53,29 +49,15 @@ Catch {
 }
 
 
-Try {
-    Import-Module Microsoft.Graph.Authentication -force -verbose
-    Import-Module Microsoft.Graph.Users -force -verbose
-    Import-Module Microsoft.Graph.Users.Actions -force -verbose
-    Import-Module ExchangeOnlineManagement -ErrorAction Stop
-}
-Catch{
-    $_
-}
+Write-Output "WhoAmI:"
+whoami
+ 
+Write-Output "Current Identity:"
+[System.Security.Principal.WindowsIdentity]::GetCurrent().Name
 
-
-
-Connect-MgGraph -Identity 
-
-Get-MgUser -Top 1
-
-Write-Output "Connected to Graph"
-
-Get-MgContext | Format-List *
-
-Write-Output "Context retrieved"
-
+write-output "Processing $email..."
 #>
+
 
 <#######################################################################################
 
@@ -84,22 +66,6 @@ Write-Output "Context retrieved"
 ########################################################################################>
 
    
-
-    Connect-AzAccount -Identity
-
-    #Set up email notifications. It will use a logic app named "Send_IT_Email"
-    $LogicAppURL = "https://prod-57.eastus.logic.azure.com:443/workflows/6b556e09885f49fcbb5ab904a0265a8d/triggers/When_an_HTTP_request_is_received/paths/invoke?api-version=2016-10-01&sp=%2Ftriggers%2FWhen_an_HTTP_request_is_received%2Frun&sv=1.0&sig=eA-bW3ox4bYk-ybuZz57GtIfmr5bdwNlDSHMaOBSRc4"
-    $ITEmail = 'dsnider@mcmillanpazdansmith.com,rjaquez@mcmillanpazdansmith.com'
-    
-    $timestamp = Get-Date -Format "yyyyMMdd_HHmmss"
-
-    # fetch IDs and such from key vault
-    $VaultName = "ITCrowd-Key-Vault"
-
-    $TenantId = Get-AzKeyVaultSecret -VaultName $vaultName -Name "TenantId" -AsPlainText
-    $GraphClientId = Get-AzKeyVaultSecret -VaultName $vaultName -Name "GraphClientId" -AsPlainText
-    $GraphCertThumbprint = Get-AzKeyVaultSecret -VaultName $vaultName -Name "GraphCertThumbprint" -AsPlainText
-
     #Offboarding URL for notifications
     $WebhookURL = "https://default2f2f30649dcf49eaa3ca341498ba0c.ea.environment.api.powerplatform.com:443/powerautomate/automations/direct/workflows/a9ea8a7f7f60463680d332dbc6767d15/triggers/manual/paths/invoke?api-version=1&sp=%2Ftriggers%2Fmanual%2Frun&sv=1.0&sig=lEzQUaKpbfI2lJlX21TLaathTbbe_MlrPHWOs0Q66NY"
 
@@ -107,9 +73,11 @@ Write-Output "Context retrieved"
     #Testing URL - IT alerts channel.     Comment this out after testing is completed
     $WebhookURL = "https://default2f2f30649dcf49eaa3ca341498ba0c.ea.environment.api.powerplatform.com:443/powerautomate/automations/direct/workflows/194aa69bcc994a0cafb4ec1e47cff9de/triggers/manual/paths/invoke?api-version=1&sp=%2Ftriggers%2Fmanual%2Frun&sv=1.0&sig=7aJPxwEU_-k7B8a9G9WaJjhMyetIK2EF2R1hSFdZcYM"
 
+    #Set up email notifications. It will use a logic app named "Send_IT_Email"
+    $LogicAppURL = "https://prod-57.eastus.logic.azure.com:443/workflows/6b556e09885f49fcbb5ab904a0265a8d/triggers/When_an_HTTP_request_is_received/paths/invoke?api-version=2016-10-01&sp=%2Ftriggers%2FWhen_an_HTTP_request_is_received%2Frun&sv=1.0&sig=eA-bW3ox4bYk-ybuZz57GtIfmr5bdwNlDSHMaOBSRc4"
+    $ITEmail = 'dsnider@mcmillanpazdansmith.com,rjaquez@mcmillanpazdansmith.com'
 
-
-    $Global:ErrorCount = 1  #tracks errors as they happen. Setting to 1 sends the notification email even without errors.
+    $Global:ErrorCount = 1  #tracks errors as they happen
 
     # ----------------------------
     # Audit object
@@ -185,7 +153,7 @@ Write-Output "Context retrieved"
         # Title
         $body.Add(@{
             type   = "TextBlock"
-            text   = "Cloud Offboarding $fullName"
+            text   = "Local Offboarding  $fullName"
             weight = "Bolder"
             size   = "Large"
         })
@@ -266,189 +234,100 @@ Write-Output "Context retrieved"
     }
 
 
-
 <#######################################################################################
 
     Active Directory
-    - Invokes a hybrid runbook to run on on-prem machine
+    - sets a random password
+    - disables the account
+    - moves to disabled OU
+    - Hides from GAL
 
 ########################################################################################>
 
-    $body = @{
 
-        email = $email
+    Import-Module ActiveDirectory
 
-    } | ConvertTo-Json -compress
+    write-output "testing with dsnider account"
+    $testuser = get-aduser -filter "Mail -eq 'dsnider@mcmillanpazdansmith.com'" -Properties SamAccountName,givenname,sn,DistinguishedName
+    $testuser
 
-    write-output "Body: $body"
 
-    $headers = New-Object "System.Collections.Generic.Dictionary[[String],[String]]"
-    $headers.Add("content-type", "application/json")
-    $headers.Add("message", "Manually sent from Powershell")
+write-output "**************************************************"
 
-    $invokeUrl = 'https://a820bc96-f0d4-4a0e-a996-c8a1db4b8416.webhook.eus.azure-automation.net/webhooks?token=wfp0AGVZCRZnERNJsDPhziXlRrky8bBC7wyHix7tanY%3d'
+
+
+write-output "**************************************************"
+
+
+    write-output "Getting AD User. $Email"
     
-    $headerMessage = @{message = "Manually sent from Powershell"}
-
-    $Response = Invoke-RestMethod -method Post -uri $invokeUrl -header $headers -body $body -UseBasicParsing -timeoutSec 20
-
-
-        
-<#######################################################################################
-
-    Microsoft Graph
-    - disables account in Entra
-    - initiates disconnect from all devices
-
-########################################################################################>
-
-
-
-    write-output "Getting Entra account."
-    try {
-        $mgUser = Get-MgUser -Filter "UserPrincipalName eq '$Email'" -Property  Id,DisplayName,GivenName,Surname,Mail,UserPrincipalName
+    Try {
+        $adUser = Get-ADUser -Filter { UserPrincipalName -eq $email } -Properties SamAccountName,givenname,sn,DistinguishedName
+        $adUser
+        Add-Audit "Get AD User" "Success" $adUser.SamAccountName
     }
     Catch {
-        write-output "failure to get Entra user"
-        write-output $_
+        $_
+        Add-Audit "Get AD User" "Failure" $Email
+        throw "AD user not found"
     }
 
-    if (-not $mgUser) { throw "Entra user not found" } else {
+    if (-not $adUser) { "AD user not found, but continuing anyway." }
 
-            $Audit.FirstName = $mgUser.GivenName
-            $Audit.LastName = $mgUser.Surname
+    $Audit.FirstName = $adUser.givenname
+    $Audit.LastName = $adUser.sn
 
-            write-output "UserPrincipalName: $($mgUser.UserPrincipalName)"
-            write-output "GivenName: $($mgUser.GivenName)"
-            write-output "Surname: $($mgUser.Surname)"
-            write-output "DisplayName: $($mgUser.DisplayName)"
+    $Name = "$($Audit.FirstName) $($Audit.LastName)"
+    Write-output "Name in Audit: $Name"
 
-    }
 
-    write-output "Getting Entra account of assignee."
-    $assigneeUser = Get-MgUser -userid $assigneeEmail -Property  Id,DisplayName,GivenName,Surname,Mail,UserPrincipalName
-
-    if (-not $assigneeUser) {
-        
-            Add-Audit "Get assignee email" "Failure" "$assigneeUser"
-            $ErrorCount++
-         
-          } else {
-
-              Add-Audit "Get assignee email" "Success" "$($assigneeUser.DisplayName)"
-
-            write-output "UserPrincipalName: $($assigneeUser.UserPrincipalName)"
-            write-output "GivenName: $($assigneeUser.GivenName)"
-            write-output "Surname: $($assigneeUser.Surname)"
-            write-output "DisplayName: $($assigneeUser.DisplayName)"
-
-    }
-
-    write-output "Disabling Entra Account."
+    write-output "Setting to random password."
     Try {
-        Update-MgUser -UserId $mgUser.Id -AccountEnabled:$false
-        Add-Audit "Disable Entra Account" "Success" "Account disabled"
+    $pw = New-RandomPassword
+    Set-ADAccountPassword -Identity $adUser.SamAccountName `
+        -NewPassword (ConvertTo-SecureString $pw -AsPlainText -Force) `
+        -Reset
+        Add-Audit "Reset AD Password" "Success" "Password reset"
     } Catch {
-        Add-Audit "Disable Entra Account" "Failed" $_.Exception.Message
+        Add-Audit "Reset AD Password" "Failed" $_.Exception.Message
+        Record-Error -ErrorRecord $_
         $ErrorCount ++
     }
 
-    write-output "Revoking all connected sessions."
+    write-output "Disabling local A/D account"
     Try {
-        Revoke-MgUserSignInSession -UserId $mgUser.Id
-        Add-Audit "Revoke Sessions" "Success" "Sessions revoked"
+        Disable-ADAccount -Identity $adUser.SamAccountName
+        Add-Audit "Disable AD Account" "Success" "Account disabled"
     } Catch {
-        Add-Audit "Revoke Sessions" "Failed" $_.Exception.Message
+        Add-Audit "Disable AD Account" "Failed" $_.Exception.Message
+        Record-Error -ErrorRecord $_
         $ErrorCount ++
     }
 
-    <#
-    # Remove from M365 groups
-        $m365Groups = Get-MgUserMemberOf -UserId $mguser.Id -All |
-            Where-Object {
-                $_.AdditionalProperties.groupTypes -contains "Unified"
-            }
-
-
-        foreach ($group in $m365Groups) {
-            try {
-                Write-Output "Removing $email from M365 group: $($group.AdditionalProperties.displayName)"
-            
-                Remove-MgGroupMemberByRef `
-                        -GroupId $group.Id `
-                        -DirectoryObjectId $user.Id `
-                        -ErrorAction Stop
-            }
-            catch {
-                Write-Error "Failed to remove from M365 group [$($group.Id)]: $_"
-            }
-
-        }
-
-    #>
-
-    Disconnect-MgGraph | Out-Null
-
-<#######################################################################################
-
-    Exchange Online
-    - calls a different runbook and waits for results to be returned (10 min timeout)
-
-########################################################################################>
-
+    write-output "Moving to disabled OU"
     Try {
-    Connect-ExchangeOnline -managedidentity -Organization 'mcmillanpazdansmith.onmicrosoft.com'
-
-        Add-Audit "Connect Exchange Online" "Success" "Connected"
+        $dn = [string]($adUser.DistinguishedName | Select-Object -First 1)
+        Move-ADObject -TargetPath "OU=Old Users and Computers,DC=mcmillanpazdansmith,DC=com" -Identity $dn
+        Add-Audit "Move to Disabled OU" "Success" "Account in OU"
     } Catch {
-        Add-Audit "Connect Exchange Online" "Failed" $_.Exception.Message
+        Add-Audit "Move to Disabled OU" "Failed" $_.Exception.Message
+        Record-Error -ErrorRecord $_
         $ErrorCount ++
     }
 
-
-       #grant permissions for someone to monitor the email inbox
+#
+    write-output "Hiding from GAL"
     Try {
-
-        Add-MailboxPermission `
-        -Identity $Email `
-        -User $AssigneeEmail `
-        -AccessRights FullAccess `
-        -InheritanceType All `
-        -AutoMapping:$true
-
+            $dn = [string]($adUser.DistinguishedName | Select-Object -First 1)
+            Set-ADUser -Identity $dn -Replace @{'msDS-cloudExtensionAttribute1' = 'HideFromGal'}
+            Add-Audit "Hide from GAL" "Success" "Account Hidden"
     
-        Add-Audit "Add mailbox permissions" "Success" "$($assigneeUser.displayname)"
-
-        # Set mailbox to shared
-        # Set-Mailbox $Email -Type Shared
-
     } Catch {
-        Add-Audit "Add mailbox permissions" "Failed" $_.Exception.Message
-        $ErrorCount ++
+            Add-Audit "Hide from GAL" "Failed" "Account Not Hidden"
+            Record-Error -ErrorRecord $_
+            $ErrorCount ++
     }
-
-
-
-
-    # Add OOO message for all incoming email.
-    $Message = "Thank you for your email. $($mgUser.displayname) is no longer at MPS, and the email you reached is no longer active. Please direct your inquiry to $($assigneeUser.displayname) at $AssigneeEmail"
-    
-    write-output $message
-
-    Try {
-
-        $result = Set-MailboxAutoReplyConfiguration -Identity $email -AutoReplyState Enabled `
-        -InternalMessage $message -ExternalMessage $message -ExternalAudience All 
-
-        $result | fl *
-
-    
-        Add-Audit "Add Out of Office message" "Success" "OOO set"
-    } Catch {
-        Add-Audit "Add Out of Office message" "Failed" $_.Exception.Message
-        $ErrorCount ++
-    }
-
+#>
 
 
 <#######################################################################################
@@ -467,19 +346,21 @@ Write-Output "Context retrieved"
 
 <#######################################################################################
 
-    Send notifications
+    Send notifications to Teams
 
 ########################################################################################>
 
-#Create adaptiveCard from audit 
-$adaptiveCardJson = Convert-RawJsonToAdaptiveCard -Json ($Audit | ConvertTo-Json -Depth 6)
+    #Create adaptiveCard from audit 
+    $adaptiveCardJson = Convert-RawJsonToAdaptiveCard -Json ($Audit | ConvertTo-Json -Depth 6)
 
 
-Invoke-RestMethod `
-  -Method Post `
-  -Uri $WebhookUrl `
-  -ContentType 'application/json' `
-  -Body $adaptiveCardJson
+    Invoke-RestMethod `
+    -Method Post `
+    -Uri $WebhookUrl `
+    -ContentType 'application/json' `
+    -Body $adaptiveCardJson
+
+     $Audit.actions 
 
 
 <#####################################################################################################
@@ -506,7 +387,7 @@ write-output "Errors: $ErrorCount"
 
         $payload = @{
             to      = $ITEmail
-            subject = "Cloud Offboarding failure - $email"
+            subject = "Local Offboarding failure - $email"
             message    = $EmailHtmlBody
         } | ConvertTo-Json -Depth 5
 
