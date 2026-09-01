@@ -1,97 +1,90 @@
 
-#$ErrorActionPreference = 'Stop'
-Connect-AzAccount -Identity
+$email = 'ajohnson@mcmillanpazdansmith.com'   # This will change to an input parameter eventually
 
-write-output "Starting..."
 
-Import-Module Microsoft.Graph.Authentication -force -verbose
-Import-Module Microsoft.Graph.Users -force -verbose
+<#######################################################################################
 
-Import-Module ExchangeOnlineManagement -ErrorAction Stop
+    Setup
 
-Write-Output "Authentication module loaded"
-Write-Output "Users module loaded"
+########################################################################################>
+
+$VerifyExchange = $false
+
+$ExoAppId            = '413af4fa-ba8b-4671-b724-28316367dc3e'
+$ExoCertThumbprint   = 'F7132556ADC49014DCE8ECD838B27E7C43C4ED74'
+$ExoOrganization     = 'mcmillanpazdansmith.com'
+
+
+$timestamp = Get-Date -Format "yyyyMMdd_HHmmss"
+
+$Report = [ordered]@{
+    UserEmail = $Email
+    RunTime   = Get-Date
+    Checks    = @()
+}
+
+
+<#######################################################################################
+
+    Helper functions
+
+########################################################################################>
+
+function Add-Check($Area,$Check,$Expected,$Actual,$Status) {
+    $Report.Checks += [ordered]@{
+        Area=$Area;Check=$Check;Expected=$Expected;Actual=$Actual;Status=$Status;Time=(Get-Date)
+    }
+}
+
+<#######################################################################################
+
+    Active Directory
+
+########################################################################################>
+Import-Module ActiveDirectory
+$ad = Get-ADUser -Filter "Mail -eq '$Email'" -Properties Enabled,PasswordLastSet
+Add-Check "AD" "Account Disabled" "False" $ad.Enabled ($(if(-not $ad.Enabled){"PASS"}else{"FAIL"}))
+
+
+<#######################################################################################
+
+    Entra
+
+########################################################################################>
+
+Import-Module Microsoft.Graph.Authentication
+Import-Module Microsoft.Graph.Users
 
 Connect-MgGraph -Identity -NoWelcome
-Write-Output "Connected to Graph"
 
-write-output "connecting to Exchange"
- Connect-ExchangeOnline -managedidentity -Organization 'mcmillanpazdansmith.onmicrosoft.com'
+$mg = Get-MgUser -Filter "mail eq '$Email'" -Property accountEnabled,signInSessionsValidFromDateTime
+Add-Check "Entra" "Account Disabled" "False" $mg.AccountEnabled ($(if(-not $mg.AccountEnabled){"PASS"}else{"FAIL"}))
+Add-Check "Entra" "Session Revoked" "Updated timestamp" $mg.SignInSessionsValidFromDateTime "INFO"
+
+Disconnect-MgGraph | Out-Null
+
+<#######################################################################################
+
+    Exchange
+
+########################################################################################>
 
 
+if ($VerifyExchange) {
+    Import-Module ExchangeOnlineManagement
+        Connect-ExchangeOnline -AppId $ExoAppId -CertificateThumbprint $ExoCertThumbprint `
+        -Organization $ExoOrganization -ShowBanner:$false
 
-Get-MgContext | Format-List *
+    $cas = Get-CASMailbox -Identity $Email
+    Add-Check "Exchange" "OWAEnabled" "False" $cas.OWAEnabled ($(if(-not $cas.OWAEnabled){"PASS"}else{"FAIL"}))
 
-Write-Output "Context retrieved"
-
-$email = 'wmpitts@mcmillanpazdansmith.com'
-
-Get-MgUser -Top 1 | Select-Object DisplayName,Mail
-
-$mgUser = Get-MgUser -userid $email  | Select-Object id,DisplayName,Mail
-
-write-output $mgUser
-
-write-output '*******************4********************'
-
-$result = Get-MailboxPermission -Identity $email
-
-write-output "permissions: $result"
-
-$result = Get-MailboxAutoReplyConfiguration -Identity $email
-
- write-output "OOO: $result"
-
-<#
-    Import-Module Microsoft.Graph.Authentication
-    Import-Module Microsoft.Graph.Users
-    Import-Module Microsoft.Graph.Users.Actions
-
-$ErrorActionPreference = 'Stop'
-
-$email = 'dsnider@mcmillanpazdansmith.com'
-
-try {
-
-    Connect-MgGraph -Identity -NoWelcome
-
-    $mguser = Get-MgUser -UserId $Email -Property `
-    Id,
-    DisplayName,
-    GivenName,
-    Surname,
-    Mail,
-    UserPrincipalName,
-    EmployeeId,
-    JobTitle,
-    Department,
-    OfficeLocation,
-    MobilePhone,
-    BusinessPhones,
-    CompanyName,
-    AccountEnabled,
-    EmployeeLeaveDateTime,
-    CreatedDateTime
-
-    if (-not $mgUser) { throw "Entra user not found" } else {
-
-            write-output "UserPrincipalName: $($mgUser.UserPrincipalName)"
-            write-output "GivenName: $($mgUser.GivenName)"
-            write-output "Surname: $($mgUser.Surname)"
-            write-output "OnPremisesSamAccountName: $($mgUser.OnPremisesSamAccountName)"
-            write-output "OnPremisesDistinguishedName: $($mgUser.OnPremisesDistinguishedName)"
-            write-output "DisplayName: $($mgUser.DisplayName)"
-            write-output "EmployeeId: $($mgUser.EmployeeId)"
-            write-output "AccountEnabled: $($mgUser.AccountEnabled)"
-    }
-
-}
-catch {
-    Write-Error $_
-    throw
-}
-finally {
-    Disconnect-MgGraph | Out-Null
+    Disconnect-ExchangeOnline -Confirm:$false | Out-Null
 }
 
-#>
+<#######################################################################################
+
+    Output notifications
+
+########################################################################################>
+
+$Report | ConvertTo-Json -Depth 6 
