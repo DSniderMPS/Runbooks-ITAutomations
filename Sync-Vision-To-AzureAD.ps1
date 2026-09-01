@@ -27,7 +27,7 @@ param (
 $WebhookURL = "https://default2f2f30649dcf49eaa3ca341498ba0c.ea.environment.api.powerplatform.com:443/powerautomate/automations/direct/workflows/194aa69bcc994a0cafb4ec1e47cff9de/triggers/manual/paths/invoke?api-version=1&sp=%2Ftriggers%2Fmanual%2Frun&sv=1.0&sig=7aJPxwEU_-k7B8a9G9WaJjhMyetIK2EF2R1hSFdZcYM"
 
 
-#Set up email notifications. It will use a logic app named "Email_with_data_attachment"
+#Set up email notifications. It will use a logic app named "Send_IT_Email"
 $LogicAppURL = "https://prod-57.eastus.logic.azure.com:443/workflows/6b556e09885f49fcbb5ab904a0265a8d/triggers/When_an_HTTP_request_is_received/paths/invoke?api-version=2016-10-01&sp=%2Ftriggers%2FWhen_an_HTTP_request_is_received%2Frun&sv=1.0&sig=eA-bW3ox4bYk-ybuZz57GtIfmr5bdwNlDSHMaOBSRc4"
 $ITEmail = 'dsnider@mcmillanpazdansmith.com,rjaquez@mcmillanpazdansmith.com'
 
@@ -555,5 +555,3 @@ try {
 catch {
     Write-Error "Failed to call Logic App. $_"
 }
-
-
