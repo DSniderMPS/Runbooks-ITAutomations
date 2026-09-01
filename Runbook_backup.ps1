@@ -37,6 +37,22 @@ $headers = @{
     "User-Agent"    = "AzureAutomationRunbook"
 }
 
+# Helper Function: Calculate GitHub's native Git Blob SHA-1
+function Get-GitBlobSha {
+    param([byte[]]$fileBytes)
+
+    $headerStr = "blob $($fileBytes.Length)`0"
+    $headerBytes = [System.Text.Encoding]::UTF8.GetBytes($headerStr)
+    
+    $combinedBytes = New-Object byte[] ($headerBytes.Length + $fileBytes.Length)
+    [Array]::Copy($headerBytes, 0, $combinedBytes, 0, $headerBytes.Length)
+    [Array]::Copy($fileBytes, 0, $combinedBytes, $headerBytes.Length, $fileBytes.Length)
+
+    $sha1 = [System.Security.Cryptography.SHA1]::Create()
+    $hashBytes = $sha1.ComputeHash($combinedBytes)
+    return ([System.BitConverter]::ToString($hashBytes)).Replace("-", "").ToLower()
+}
+
 # 3. Get all published Runbooks
 $runbooks = Get-AzAutomationRunbook -ResourceGroupName $ResourceGroupName `
                                      -AutomationAccountName $AutomationAccountName
@@ -58,8 +74,8 @@ foreach ($runbook in $runbooks) {
         Default               { ".txt" }
     }
     
-    $fileName = "$name$ext"
-    $localFilePath = Join-Path -Path $tempPath -ChildPath $fileName
+    $targetFileName = "$name$ext"
+    $escapedFileName = [Uri]::EscapeDataString($targetFileName)
 
     # Export published version locally
     Export-AzAutomationRunbook -ResourceGroupName $ResourceGroupName `
@@ -68,203 +84,100 @@ foreach ($runbook in $runbooks) {
                               -OutputFolder $tempPath `
                               -Slot Published | Out-Null
 
-    # Compute SHA256 of local content
-    $localHash = (Get-FileHash -Path $localFilePath -Algorithm SHA256).Hash
+    # Dynamically locate exported file (handles varying default export naming)
+    $exportedFile = Get-ChildItem -Path $tempPath -Filter "$name*" | Select-Object -First 1
 
-    # Prepare raw bytes and base64
-    $contentRaw = Get-Content -Path $localFilePath -Raw
-    $contentBytes = [System.Text.Encoding]::UTF8.GetBytes($contentRaw)
-    $base64Content = [System.Convert]::ToBase64String($contentBytes)
+    if (-not $exportedFile -or -not (Test-Path $exportedFile.FullName)) {
+        Write-Error "Could not find exported local file for runbook '$name' in $tempPath"
+        continue
+    }
+
+    $localFilePath = $exportedFile.FullName
+
+    # Read raw bytes directly
+    $fileBytes = [System.IO.File]::ReadAllBytes($localFilePath)
+    $localBlobSha = Get-GitBlobSha -fileBytes $fileBytes
+    
+    # Ensure raw Base64 string has NO line insertions (PS 5.1 safe)
+    $base64Content = [System.Convert]::ToBase64String($fileBytes, [System.Base64FormattingOptions]::None)
+
+
+Write-Output "*********************************************BEGIN*************************************************************"
+
+$testUrl = "https://api.github.com/repos/$GitHubOwner/$GitHubRepo/contents/Create-VantagePointProject.ps1?ref=$Branch"
+try {
+    $res = Invoke-RestMethod -Uri $testUrl -Headers $headers -Method Get
+    Write-Output "SUCCESS: Found file! SHA is $($res.sha)"
+} catch {
+    Write-Output "DEBUG ERROR: $_"
+    Write-Output "Status Code: $($_.Exception.Response.StatusCode)"
+}
+
+
+Write-Output "********************************************END**************************************************************"
 
     # Check GitHub for existing file metadata
-    $ghApiUrl = "https://api.github.com/repos/$GitHubOwner/$GitHubRepo/contents/$fileName?ref=$Branch"
+    $ghApiUrl = "https://api.github.com/repos/$GitHubOwner/$GitHubRepo/contents/${escapedFileName}?ref=$Branch"
     $fileSha = $null
-    $remoteHash = $null
 
     try {
         $existingFile = Invoke-RestMethod -Uri $ghApiUrl -Headers $headers -Method Get -ErrorAction Stop
-        
-        # Verify SHA exists on the response object
-        if ($null -ne $existingFile -and $null -ne $existingFile.sha) {
+        if ($existingFile -and $existingFile.sha) {
             $fileSha = $existingFile.sha
-
-            # Decode existing GitHub file base64 content to compare hash
-            $cleanBase64 = $existingFile.content -replace "\s", ""
-            if (-not [string]::IsNullOrEmpty($cleanBase64)) {
-                $remoteRawBytes = [System.Convert]::FromBase64String($cleanBase64)
-                $hasher = [System.Security.Cryptography.SHA256]::Create()
-                $remoteHash = ([System.BitConverter]::ToString($hasher.ComputeHash($remoteRawBytes))).Replace("-", "")
-            }
         }
     } catch [System.Net.WebException] {
         $resp = $_.Exception.Response
         if ($resp -and $resp.StatusCode -eq [System.Net.HttpStatusCode]::NotFound) {
-            Write-Output "[i] $fileName is new (not found on GitHub)."
+            Write-Output "[i] $targetFileName is a new file."
         } else {
             $errMessage = $_.Exception.Message
-            Write-Warning "WebException checking GitHub for ${fileName}: ${errMessage}"
+            Write-Warning "WebException checking GitHub for ${targetFileName}: ${errMessage}"
         }
     } catch {
         $errMessage = $_.Exception.Message
-        Write-Warning "Error checking GitHub for ${fileName}: ${errMessage}"
+        Write-Warning "Error checking GitHub for ${targetFileName}: ${errMessage}"
     }
 
-    # Skip commit if content hasn't changed
-    if ($remoteHash -and ($localHash -eq $remoteHash)) {
-        Write-Output "[-] No changes detected for $fileName. Skipping."
+    # Compare local Git Blob SHA directly with GitHub's returned blob SHA
+    if ($fileSha -and ($localBlobSha -eq $fileSha)) {
+        Write-Output "[-] No changes detected for $targetFileName. Skipping commit."
         Remove-Item -Path $localFilePath -Force -ErrorAction SilentlyContinue
         continue
     }
 
-    # Construct request body
+    # Construct request payload
     $body = @{
-        message = "Sync runbook $fileName from Azure Automation"
+        message = "Sync runbook $targetFileName from Azure Automation"
         content = $base64Content
         branch  = $Branch
     }
 
-    # Attach SHA if the file already exists on GitHub
-    if (-not [string]::IsNullOrEmpty($fileSha)) {
+    # Include existing file SHA if updating
+    if ($fileSha) {
         $body["sha"] = $fileSha
     }
 
     $jsonBody = $body | ConvertTo-Json -Compress
 
     try {
-        $commitUrl = "https://api.github.com/repos/$GitHubOwner/$GitHubRepo/contents/$fileName"
+        $commitUrl = "https://api.github.com/repos/$GitHubOwner/$GitHubRepo/contents/${escapedFileName}"
         $response = Invoke-RestMethod -Uri $commitUrl -Headers $headers -Method Put -Body $jsonBody -ErrorAction Stop
-        Write-Output "[+] Successfully committed $fileName to $GitHubOwner/$GitHubRepo ($Branch)"
+        Write-Output "[+] Successfully committed $targetFileName to $GitHubOwner/$GitHubRepo ($Branch)"
+    } catch [System.Net.WebException] {
+        $errMessage = $_.Exception.Message
+        $respStream = $_.Exception.Response.GetResponseStream()
+        if ($respStream) {
+            $reader = New-Object System.IO.StreamReader($respStream)
+            $apiError = $reader.ReadToEnd()
+            Write-Error "Failed to commit ${targetFileName} to GitHub: ${errMessage} | API Response: ${apiError}"
+        } else {
+            Write-Error "Failed to commit ${targetFileName} to GitHub: ${errMessage}"
+        }
     } catch {
         $errMessage = $_.Exception.Message
-        if ($_.Exception.Response) {
-            # Capture full response body from API error if available
-            $reader = New-Object System.IO.StreamReader($_.Exception.Response.GetResponseStream())
-            $apiError = $reader.ReadToEnd()
-            Write-Error "Failed to commit ${fileName} to GitHub: ${errMessage} | Details: ${apiError}"
-        } else {
-            Write-Error "Failed to commit ${fileName} to GitHub: ${errMessage}"
-        }
+        Write-Error "Failed to commit ${targetFileName} to GitHub: ${errMessage}"
     }
 
     # Clean up local temp file
-    Remove-Item -Path $localFilePath -Force -ErrorAction SilentlyContinue
-}
-
-# 1. Connect using System-Assigned Managed Identity
-Connect-AzAccount -Identity | Out-Null
-
-# 2. Retrieve GitHub PAT from Azure Automation Credential Asset
-$ghCredential = Get-AutomationPSCredential -Name $CredentialAssetName
-if (-not $ghCredential) {
-    throw "Credential asset '$CredentialAssetName' could not be retrieved."
-}
-
-# Get NetworkCredential to extract the plain-text password (PAT) safely in memory
-$gitHubPat = $ghCredential.GetNetworkCredential().Password
-
-# Setup GitHub Authorization Header
-$headers = @{
-    "Authorization" = "token $gitHubPat"
-    "Accept"        = "application/vnd.github.v3+json"
-}
-
-# 3. Fetch all published Runbooks
-$runbooks = Get-AzAutomationRunbook -ResourceGroupName $ResourceGroupName `
-                                     -AutomationAccountName $AutomationAccountName
-
-Write-Output "Found $($runbooks.Count) runbooks. Starting sync process..."
-
-$tempPath = $env:TEMP
-
-foreach ($runbook in $runbooks) {
-    $name = $runbook.Name
-    $type = $runbook.RunbookType
-    
-    # Determine file extension based on runbook type
-    $ext = switch ($type) {
-        "PowerShell"          { ".ps1" }
-        "PowerShellWorkflow"  { ".ps1" }
-        "GraphicalPowerShell" { ".graphrunbook" }
-        "Python2"             { ".py" }
-        "Python3"             { ".py" }
-        Default               { ".txt" }
-    }
-    
-    $fileName = "$name$ext"
-    $localFilePath = Join-Path -Path $tempPath -ChildPath $fileName
-
-    # Export content locally
-    Export-AzAutomationRunbook -ResourceGroupName $ResourceGroupName `
-                              -AutomationAccountName $AutomationAccountName `
-                              -Name $name `
-                              -OutputFolder $tempPath `
-                              | Out-Null
-
-    # Calculate local content hash
-    $localHash = (Get-FileHash -Path $localFilePath -Algorithm SHA256).Hash
-
-    # Read bytes for Base64 encoding
-    $contentRaw = Get-Content -Path $localFilePath -Raw
-    $contentBytes = [System.Text.Encoding]::UTF8.GetBytes($contentRaw)
-    $base64Content = [System.Convert]::ToBase64String($contentBytes)
-
-# Check existing file on GitHub safely in PowerShell 5.1
-    $ghApiUrl = "https://api.github.com/repos/$GitHubOwner/$GitHubRepo/contents/$fileName?ref=$Branch"
-    $fileSha = $null
-    $remoteHash = $null
-
-    try {
-        $existingFile = Invoke-RestMethod -Uri $ghApiUrl -Headers $headers -Method Get
-        
-        if ($existingFile.sha) {
-            $fileSha = $existingFile.sha
-
-            # Decode base64 content from GitHub to compute its SHA256 hash
-            $remoteRawBytes = [System.Convert]::FromBase64String($existingFile.content)
-            $hasher = [System.Security.Cryptography.SHA256]::Create()
-            $remoteHash = ([System.BitConverter]::ToString($hasher.ComputeHash($remoteRawBytes))).Replace("-", "")
-        }
-    } catch [System.Net.WebException] {
-        # Check if error is a 404 (File does not exist on GitHub yet)
-        $resp = $_.Exception.Response
-        if ($resp -and $resp.StatusCode -eq [System.Net.HttpStatusCode]::NotFound) {
-            Write-Output "[i] $fileName does not exist on GitHub yet. Creating new file."
-        } else {
-            $errMessage = $_.Exception.Message
-            Write-Warning "WebException checking GitHub for ${fileName}: ${errMessage}"
-        }
-    } catch {
-        $errMessage = $_.Exception.Message
-        Write-Warning "Unexpected error checking GitHub for ${fileName}: ${errMessage}"
-    }
-    # Compare hashes prior to committing
-    if ($remoteHash -and ($localHash -eq $remoteHash)) {
-        Write-Output "[-] No changes detected for $fileName. Skipping commit."
-        Remove-Item -Path $localFilePath -Force -ErrorAction SilentlyContinue
-        continue
-    }
-
-    # 4. Commit or update file on GitHub
-    $body = @{
-        message = "Sync runbook $fileName from Azure Automation"
-        content = $base64Content
-        branch  = $Branch
-    }
-
-    if ($fileSha) {
-        $body.sha = $fileSha
-    }
-
-    $jsonBody = $body | ConvertTo-Json -Compress
-
-    try {
-        $commitUrl = "https://api.github.com/repos/$GitHubOwner/$GitHubRepo/contents/$fileName"
-        $response = Invoke-RestMethod -Uri $commitUrl -Headers $headers -Method Put -Body $jsonBody
-        Write-Output "[+] Successfully committed $fileName to $GitHubOwner/$GitHubRepo ($Branch)"
-    } catch {
-        Write-Error "Failed to commit $fileName to GitHub: $_"
-    }
-
-    # Clean up local temporary file
     Remove-Item -Path $localFilePath -Force -ErrorAction SilentlyContinue
 }
