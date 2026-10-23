@@ -18,7 +18,7 @@ param(
     [Parameter(Mandatory = $false)]
     [string]$CredentialAssetName = "GitHubPatCredential"
 )
-
+ 
 
 # 1. Connect via Managed Identity
 Connect-AzAccount -Identity | Out-Null
@@ -62,6 +62,7 @@ Write-Output "Found $($runbooks.Count) runbooks. Starting sync..."
 $tempPath = $env:TEMP
 
 foreach ($runbook in $runbooks) {
+    Write-Output "*********************************************BEGIN*************************************************************"
     $name = $runbook.Name
     $type = $runbook.RunbookType
     
@@ -102,19 +103,19 @@ foreach ($runbook in $runbooks) {
     $base64Content = [System.Convert]::ToBase64String($fileBytes, [System.Base64FormattingOptions]::None)
 
 
-Write-Output "*********************************************BEGIN*************************************************************"
-
-$testUrl = "https://api.github.com/repos/$GitHubOwner/$GitHubRepo/contents/Create-VantagePointProject.ps1?ref=$Branch"
-try {
-    $res = Invoke-RestMethod -Uri $testUrl -Headers $headers -Method Get
-    Write-Output "SUCCESS: Found file! SHA is $($res.sha)"
-} catch {
-    Write-Output "DEBUG ERROR: $_"
-    Write-Output "Status Code: $($_.Exception.Response.StatusCode)"
-}
 
 
-Write-Output "********************************************END**************************************************************"
+    $testUrl = "https://api.github.com/repos/$GitHubOwner/$GitHubRepo/contents/Create-VantagePointProject.ps1?ref=$Branch"
+    try {
+        $res = Invoke-RestMethod -Uri $testUrl -Headers $headers -Method Get
+        Write-Output "SUCCESS: Found file! SHA is $($res.sha)"
+    } catch {
+        Write-Output "DEBUG ERROR: $_"
+        Write-Output "Status Code: $($_.Exception.Response.StatusCode)"
+    }
+
+
+    
 
     # Check GitHub for existing file metadata
     $ghApiUrl = "https://api.github.com/repos/$GitHubOwner/$GitHubRepo/contents/${escapedFileName}?ref=$Branch"
@@ -180,4 +181,6 @@ Write-Output "********************************************END*******************
 
     # Clean up local temp file
     Remove-Item -Path $localFilePath -Force -ErrorAction SilentlyContinue
+
+    Write-Output "********************************************END**************************************************************"
 }
