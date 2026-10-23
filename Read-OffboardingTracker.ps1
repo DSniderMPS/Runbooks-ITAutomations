@@ -1,21 +1,129 @@
 
 
-Import-module  Microsoft.Graph.Authentication
-
-
 Connect-AzAccount -Identity
+
+Import-module  Microsoft.Graph.Authentication
+ 
+
+<##################################################################################################
+
+    Just testing
+
+##################################################################################################>
+
+    Import-Module Microsoft.Graph.Authentication
+    Import-Module Microsoft.Graph.sites
+
+    #
+
+    $TenantId = '2f2f3064-9dcf-49ea-a3ca-341498ba0cea'
+    $GraphClientId = '413af4fa-ba8b-4671-b724-28316367dc3e'
+    $GraphCertThumbprint = 'F7132556ADC49014DCE8ECD838B27E7C43C4ED74'
+
+Disconnect-MgGraph -ErrorAction SilentlyContinue
+
+    Connect-MgGraph -identity -NoWelcome
+
+    Get-MgContext | Select-Object -ExpandProperty Scopes
+
+    write-output ''
+    write-output ''
+
+write-output "*********************************1*****************************************"
+
+    $site = Get-MgSite `
+    -SiteId "appriver3651017312.sharepoint.com:/sites/TeamMembersontheMove-Offboarding"
+
+    write-output "Site:"
+    $Site
+
+    $SiteID = $site.id
+    write-output "SiteID: $siteID"
+    
+write-output "*********************************2*****************************************"
+
+$token = (Get-AzAccessToken -ResourceTypeName MSGraph).Token
+
+Invoke-RestMethod -Headers @{ Authorization = "Bearer $token" } -Uri "https://graph.microsoft.com/v1.0/sites/$($site.Id)/lists"
+
+write-output "*********************************2A*****************************************"
+
+$token = (Get-AzAccessToken -ResourceTypeName MSGraph).Token
+
+write-output "token: $token"
+
+$payload = $token.Split('.')[1]
+
+switch ($payload.Length % 4) {
+    2 { $payload += '==' }
+    3 { $payload += '=' }
+}
+
+$json = [Text.Encoding]::UTF8.GetString(
+    [Convert]::FromBase64String(
+        $payload.Replace('-','+')
+    )
+)
+
+$json | ConvertFrom-Json | Select-Object -ExpandProperty roles
+
+
+    Invoke-MgGraphRequest -Method GET -Uri "https://graph.microsoft.com/v1.0/sites/$siteID/lists"
+    
+write-output "*********************************3*****************************************"
+
+    TRY {
+        $list = Get-MgSiteList -SiteId $SiteID -all -debug #| Where-Object { $_.DisplayName -eq 'Offboarding Tracker' }
+       
+    }
+    Catch {
+        $_
+    }
+
+write-output "*********************************4*****************************************"
+
+    write-output "List:"
+    $list
+
+write-output "*********************************5*****************************************"
+
+    $items = Get-MgSiteListItem `
+    -SiteId $site.Id `
+    -ListId $list.Id `
+    -ExpandProperty fields `
+    -All
+
+    $item.Fields.AdditionalProperties
+
+    $records = foreach ($item in $items) {
+        $f = $item.Fields.AdditionalProperties
+
+        [pscustomobject]@{
+            Id          = $item.Id
+            Employee    = $f.EmployeeName
+            Email       = $f.Email
+            Status      = $f.Status
+            Action      = $f.Action
+            Created     = $item.CreatedDateTime
+        }
+    }
+
+    $records
+
+
+
 
 
 <##################################################################################################
 
     Setup
 
-##################################################################################################>
+##################################################################################################
 
     $TeamName             = 'Team Members on the move'
     $ChannelName          = 'Offboarding'
     $ListTitle            = 'Offboarding tracker'
-    $DateFieldDisplayName = 'First Day'           # <-- change this to your date column display name
+    $DateFieldDisplayName = 'Last Day'           # <-- change this to your date column display name
 
     #Fetch URL for webhook
         $VaultName = "ITCrowd-Key-Vault"
@@ -32,7 +140,7 @@ Connect-AzAccount -Identity
 
     Helper functions
 
-##################################################################################################>
+##################################################################################################
 
     function Ensure-GraphConnection {
         [CmdletBinding()]
@@ -218,7 +326,7 @@ Connect-AzAccount -Identity
 
     Main
 
-##################################################################################################>
+##################################################################################################
 
     try {
         Ensure-GraphConnection
@@ -318,3 +426,5 @@ Connect-AzAccount -Identity
         Write-Error $_
         throw
     }
+
+    #>
