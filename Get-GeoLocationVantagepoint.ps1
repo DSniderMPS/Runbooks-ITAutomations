@@ -2,7 +2,7 @@
 <#  This is the webhook URL as of 3-26-2026. Update here for documentation whenever it is refreshed.
 
 https://a820bc96-f0d4-4a0e-a996-c8a1db4b8416.webhook.eus.azure-automation.net/webhooks?token=NBiBvq%2fsVbR%2bKp7nrLHNIAmTl6MltAYtRvJgRH4O3V4%3d
-
+ 
 #>
 
 param
@@ -48,11 +48,11 @@ $Global:username = Get-AzKeyVaultSecret -VaultName $vaultName -Name "VisionUser"
 $Global:password = Get-AzKeyVaultSecret -VaultName $vaultName -Name "VisionPW" -AsPlainText
 $Global:ClientID = Get-AzKeyVaultSecret -VaultName $vaultName -Name "VantagePointClientID" -AsPlainText
 $Global:ClientSecret = Get-AzKeyVaultSecret -VaultName $vaultName -Name "VantagePointClientSecret" -AsPlainText
+$VPBaseURL = Get-AzKeyVaultSecret -VaultName $vaultName -Name "VantagePointAPIURL" -AsPlainText
 
 
 #Set VantagePoint server and database for token retrieval
-$BaseURL = "https://demov20261.dvphosted.com/mps/api"
-$database = "MPSVP_Preview"
+$database = "MPSvp"
 
 #Get VantagePoint token
 $Params = @{
@@ -61,7 +61,7 @@ password = $Password
 ClientID = $ClientID
 ClientSecret = $ClientSecret
 database = $database
-BaseURL = $BaseURL
+BaseURL = $VPBaseURL
 }
 
 write-output $Params
@@ -199,7 +199,7 @@ $url = $url.replace("<search>",$strSearch)
 #
 
 
-$URL = "$BaseURL/project/$projNumber"  #used to get top level (WBS2 = '')
+$URL = "$VPBaseURL/project/$projNumber"  #used to get top level (WBS2 = '')
 
 
 
@@ -295,7 +295,7 @@ CustLocationDescription=$NewLocationDescription
 
 }
 
-    $URL = "$BaseURL/project/$($ProjNumber)?requiredFieldValidation=N&startWorkflow=N"  #the two parameters prevent field validation and workflows, respectively
+    $URL = "$VPBaseURL/project/$($ProjNumber)?requiredFieldValidation=N&startWorkflow=N"  #the two parameters prevent field validation and workflows, respectively
 
 
 	$headers = New-Object "System.Collections.Generic.Dictionary[[String],[String]]"
