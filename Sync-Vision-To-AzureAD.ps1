@@ -1,10 +1,13 @@
 
+<#####################
+
+NOTE: the name of the runbook says "Vision", but it is actually syncing from VantagePoint
+
+#####################>
 
 param (
     [int]$DaysBack = 40
 )
-
-
 
 
 <#####################################################################################################
@@ -40,7 +43,7 @@ Connect-AzAccount `
     -CertificateThumbprint $Thumbprint `
     -ErrorAction Stop
 
-    $database = "MPSVP_Preview"
+    $database = "MPSvp"
 
    
     # Retrieve VP credentials to get a token
@@ -88,120 +91,49 @@ $Audit = [ordered]@{
 
 #####################################################################################################>
 
-function Add-Audit {
-    param($User, $Change, $NewValue, $Result)
-    $Audit.Actions += [ordered]@{
-        User   = $User
-        Change = $Change
-        NewValue = $NewValue
-        Result = $Result
-        Time   = Get-Date
-    }
-}
-
-function Convert-ToAdaptiveCard {
-    param (
-        [Parameter(Mandatory)]
-        $InputObject
-    )
-
-    # Handle JSON string or object input
-    if ($InputObject -is [string]) {
-        $data = $InputObject | ConvertFrom-Json
-    }
-    else {
-        $data = $InputObject
+    function Add-Audit {
+        param($User, $Change, $NewValue, $Result)
+        $Audit.Actions += [ordered]@{
+            User   = $User
+            Change = $Change
+            NewValue = $NewValue
+            Result = $Result
+            Time   = Get-Date
+        }
     }
 
-    $startTime = $data.StartTime.DateTime
-    $userColWidth = "160px"   # fixed width for ~10-char usernames
-
-    # Header row
-    $headerRow = @{
-        type      = "ColumnSet"
-        separator = $true
-        spacing   = "Medium"
-        columns   = @(
-            @{
-                type  = "Column"
-                width = $userColWidth
-                items = @(
-                    @{
-                        type   = "TextBlock"
-                        text   = "User"
-                        weight = "Bolder"
-                        wrap   = $false
-                        maxLines = 1
-                    }
-                )
-            },
-            @{
-                type  = "Column"
-                width = $userColWidth
-                items = @(
-                    @{
-                        type   = "TextBlock"
-                        text   = "Change"
-                        weight = "Bolder"
-                        wrap   = $true
-                    }
-                )
-            },
-            @{
-                type  = "Column"
-                width = $userColWidth
-                items = @(
-                    @{
-                        type   = "TextBlock"
-                        text   = "New Value"
-                        weight = "Bolder"
-                        wrap   = $true
-                    }
-                )
-            },
-            @{
-                type  = "Column"
-                width = $userColWidth
-                items = @(
-                    @{
-                        type   = "TextBlock"
-                        text   = "Result"
-                        weight = "Bolder"
-                        wrap   = $true
-                    }
-                )
-            }
+    function Convert-ToAdaptiveCard {
+        param (
+            [Parameter(Mandatory)]
+            $InputObject
         )
-    }
 
-    # Data rows
-    $rows = foreach ($action in $data.Actions) {
-        $isEmailNotFound = $action.Change -match '(?i)email not found'
-
-        $changeColor  = if ($isEmailNotFound) { "Attention" } else { "Default" }
-        $changeWeight = if ($isEmailNotFound) { "Bolder" } else { "Default" }
-
-
-        $auditColor = switch ($action.Result) {
-            'Success' { 'Good' }
-            'Failure' { 'Attention' }
-            default   { 'Default' }
+        # Handle JSON string or object input
+        if ($InputObject -is [string]) {
+            $data = $InputObject | ConvertFrom-Json
+        }
+        else {
+            $data = $InputObject
         }
 
+        $startTime = $data.StartTime.DateTime
+        $userColWidth = "160px"   # fixed width for ~10-char usernames
 
-        @{
+        # Header row
+        $headerRow = @{
             type      = "ColumnSet"
             separator = $true
-            spacing   = "Small"
+            spacing   = "Medium"
             columns   = @(
                 @{
                     type  = "Column"
                     width = $userColWidth
                     items = @(
                         @{
-                            type     = "TextBlock"
-                            text     = "$($action.User)"
-                            wrap     = $false
+                            type   = "TextBlock"
+                            text   = "User"
+                            weight = "Bolder"
+                            wrap   = $false
                             maxLines = 1
                         }
                     )
@@ -212,10 +144,9 @@ function Convert-ToAdaptiveCard {
                     items = @(
                         @{
                             type   = "TextBlock"
-                            text   = "$($action.Change)"
+                            text   = "Change"
+                            weight = "Bolder"
                             wrap   = $true
-                            color  = $changeColor
-                            weight = $changeWeight
                         }
                     )
                 },
@@ -224,9 +155,10 @@ function Convert-ToAdaptiveCard {
                     width = $userColWidth
                     items = @(
                         @{
-                            type = "TextBlock"
-                            text = "$($action.NewValue)"
-                            wrap = $true
+                            type   = "TextBlock"
+                            text   = "New Value"
+                            weight = "Bolder"
+                            wrap   = $true
                         }
                     )
                 },
@@ -235,43 +167,114 @@ function Convert-ToAdaptiveCard {
                     width = $userColWidth
                     items = @(
                         @{
-                            type = "TextBlock"
-                            text = "$($action.Result)"
-                            color = $auditColor
-                            wrap = $true
+                            type   = "TextBlock"
+                            text   = "Result"
+                            weight = "Bolder"
+                            wrap   = $true
                         }
                     )
                 }
             )
         }
-    }
 
-    $card = @{
-        '$schema' = "http://adaptivecards.io/schemas/adaptive-card.json"
-        type      = "AdaptiveCard"
-        version   = "1.4"
-        msteams = @{
-            width = "Full"
+        # Data rows
+        $rows = foreach ($action in $data.Actions) {
+            $isEmailNotFound = $action.Change -match '(?i)email not found'
+
+            $changeColor  = if ($isEmailNotFound) { "Attention" } else { "Default" }
+            $changeWeight = if ($isEmailNotFound) { "Bolder" } else { "Default" }
+
+
+            $auditColor = switch ($action.Result) {
+                'Success' { 'Good' }
+                'Failure' { 'Attention' }
+                default   { 'Default' }
+            }
+
+
+            @{
+                type      = "ColumnSet"
+                separator = $true
+                spacing   = "Small"
+                columns   = @(
+                    @{
+                        type  = "Column"
+                        width = $userColWidth
+                        items = @(
+                            @{
+                                type     = "TextBlock"
+                                text     = "$($action.User)"
+                                wrap     = $false
+                                maxLines = 1
+                            }
+                        )
+                    },
+                    @{
+                        type  = "Column"
+                        width = $userColWidth
+                        items = @(
+                            @{
+                                type   = "TextBlock"
+                                text   = "$($action.Change)"
+                                wrap   = $true
+                                color  = $changeColor
+                                weight = $changeWeight
+                            }
+                        )
+                    },
+                    @{
+                        type  = "Column"
+                        width = $userColWidth
+                        items = @(
+                            @{
+                                type = "TextBlock"
+                                text = "$($action.NewValue)"
+                                wrap = $true
+                            }
+                        )
+                    },
+                    @{
+                        type  = "Column"
+                        width = $userColWidth
+                        items = @(
+                            @{
+                                type = "TextBlock"
+                                text = "$($action.Result)"
+                                color = $auditColor
+                                wrap = $true
+                            }
+                        )
+                    }
+                )
+            }
         }
-        body      = @(
-            @{
-                type   = "TextBlock"
-                text   = "User Update Summary"
-                weight = "Bolder"
-                size   = "Medium"
-            },
-            @{
-                type     = "TextBlock"
-                text     = "Started: $startTime"
-                isSubtle = $true
-                spacing  = "None"
-            },
-            $headerRow
-        ) + $rows
-    }
 
-    return $card | ConvertTo-Json -Depth 25
-}
+        $card = @{
+            '$schema' = "http://adaptivecards.io/schemas/adaptive-card.json"
+            type      = "AdaptiveCard"
+            version   = "1.4"
+            msteams = @{
+                width = "Full"
+            }
+            body      = @(
+                @{
+                    type   = "TextBlock"
+                    text   = "User Update Summary"
+                    weight = "Bolder"
+                    size   = "Medium"
+                },
+                @{
+                    type     = "TextBlock"
+                    text     = "Started: $startTime"
+                    isSubtle = $true
+                    spacing  = "None"
+                },
+                $headerRow
+            ) + $rows
+        }
+
+        return $card | ConvertTo-Json -Depth 25
+    }
 
 
 <#####################################################################################################
@@ -280,42 +283,42 @@ function Convert-ToAdaptiveCard {
 
 #####################################################################################################>
 
-# Calculate date filter (UTC, ISO 8601)
-$SinceDate = (Get-Date).AddDays(-$DaysBack).ToUniversalTime().ToString("yyyy-MM-ddTHH:mm:ssZ")
+    # Calculate date filter (UTC, ISO 8601)
+    $SinceDate = (Get-Date).AddDays(-$DaysBack).ToUniversalTime().ToString("yyyy-MM-ddTHH:mm:ssZ")
 
-# Build OData query
-$QueryParams = @{
-    "filterHash[0][name]"     = "status"
-    "filterHash[0][value]"    = "a"
+    # Build OData query
+    $QueryParams = @{
+        "filterHash[0][name]"     = "status"
+        "filterHash[0][value]"    = "a"
 
-    "filterHash[1][name]"     = "moddate"
-    "filterHash[1][opp]" = ">="
-    "filterHash[1][value]"    = "$SinceDate"
-}
+        "filterHash[1][name]"     = "moddate"
+        "filterHash[1][opp]" = ">="
+        "filterHash[1][value]"    = "$SinceDate"
+    }
 
-# Build query string safely
-$queryString = ($queryParams.GetEnumerator() | ForEach-Object {
-    "$($_.Key)=$([System.Web.HttpUtility]::UrlEncode($_.Value))"
-}) -join "&"
+    # Build query string safely
+    $queryString = ($queryParams.GetEnumerator() | ForEach-Object {
+        "$($_.Key)=$([System.Web.HttpUtility]::UrlEncode($_.Value))"
+    }) -join "&"
 
-$Uri = "$baseUrl/employee?fieldfilter=employee,status,moddate&$queryString"
+    $Uri = "$baseUrl/employee?fieldfilter=employee,status,moddate&$queryString"
 
-# Call Vantagepoint
-$response = Invoke-RestMethod `
-    -Uri $Uri `
-    -Method Get `
-    -Headers $Headers   # <-- include auth headers/session cookie
+    # Call Vantagepoint
+    $response = Invoke-RestMethod `
+        -Uri $Uri `
+        -Method Get `
+        -Headers $Headers   # <-- include auth headers/session cookie
 
-# Return only Employee values
-$response.value | Select-Object -ExpandProperty Employee
+    # Return only Employee values
+    $response.value | Select-Object -ExpandProperty Employee
 
-$Users = $Response.Employee
+    $Users = $Response.Employee
 
-# initialize Audit object 
+    # initialize Audit object 
 
 
-#  Loop through all users
-ForEach ($user in $Users) {
+    #  Loop through all users
+    ForEach ($user in $Users) {
 
     write-output "****************************************************************************************"
 <#####################################################################################################
