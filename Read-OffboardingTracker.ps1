@@ -3,7 +3,7 @@
 Connect-AzAccount -Identity
 
 Import-module  Microsoft.Graph.Authentication
- 
+
 
 <##################################################################################################
 
@@ -22,14 +22,29 @@ Import-module  Microsoft.Graph.Authentication
 
 Disconnect-MgGraph -ErrorAction SilentlyContinue
 
-    Connect-MgGraph -identity -NoWelcome
+    Connect-MgGraph -Identity -NoWelcome | Out-Null
 
-    Get-MgContext | Select-Object -ExpandProperty Scopes
+$context = Get-MgContext
 
-    write-output ''
-    write-output ''
+Write-Output "AuthType: $($context.AuthType)"
+Write-Output "TenantId: $($context.TenantId)"
+Write-Output "Account: $($context.Account)"
+Write-Output "Scopes: $($context.Scopes -join ', ')"
 
 write-output "*********************************1*****************************************"
+
+Write-Output "PowerShell: $($PSVersionTable.PSVersion)"
+
+Get-Module Microsoft.Graph* |
+    Select-Object Name, Version, Path |
+    Format-Table -AutoSize
+
+Get-Module Microsoft.Graph* -ListAvailable |
+    Select-Object Name, Version, Path |
+    Sort-Object Name, Version |
+    Format-Table -AutoSize
+
+
 
     $site = Get-MgSite `
     -SiteId "appriver3651017312.sharepoint.com:/sites/TeamMembersontheMove-Offboarding"
@@ -74,6 +89,7 @@ write-output "*********************************3********************************
 
     TRY {
         $list = Get-MgSiteList -SiteId $SiteID -all -debug #| Where-Object { $_.DisplayName -eq 'Offboarding Tracker' }
+        write-output "no error getting list"
        
     }
     Catch {
